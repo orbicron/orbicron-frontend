@@ -1,12 +1,11 @@
-// store/authStore.ts
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 interface AuthState {
-    user: any | null;
-    isAuthenticated: boolean;
-    setUser: (user: any) => void;
-    logout: () => void;
+    user: any | null
+    isAuthenticated: boolean
+    setUser: (user: any) => void
+    logout: () => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -19,4 +18,4 @@ export const useAuthStore = create<AuthState>()(
         }),
         { name: 'pisplit-auth' }
     )
-);
+)

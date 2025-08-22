@@ -2,7 +2,7 @@
 'use client';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useExpenseStore } from "@/store/useExpense";
+import { useExpenseStore } from "@/store/expenseStore";
 import { useAuthStore } from '@/store/authStore';
 
 export const AddExpenseForm = () => {
