@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  piUserId      String   @unique
+  displayId     String   @unique
+  avatar        String?
+  preferences   Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  expenses      Expense[]
+  expenseSplits ExpenseSplit[]
+  settlementsAsPayer Settlement[] @relation("Payer")
+  settlementsAsPayee Settlement[] @relation("Payee")
+  connectionsFrom Connection[] @relation("ConnectionsFrom")
+  connectionsTo   Connection[] @relation("ConnectionsTo")
+  groupMembers    GroupMember[]
+  activities      Activity[]
+  achievements    UserAchievement[]
+
+  @@map("users")
+}
+
+model Expense {
+  id          String    @id @default(uuid())
+  title       String
+  amount      Float
+  currency    String    @default("PI")
+  description String?
+  category    String?
+  paidById    String
+  groupId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  paidBy      User          @relation(fields: [paidById], references: [id])
+  group       Group?        @relation(fields: [groupId], references: [id])
+  splits      ExpenseSplit[]
+
+  @@map("expenses")
+}
+
+model ExpenseSplit {
+  id        String   @id @default(uuid())
+  expenseId String
+  userId    String
+  amount    Float
+  status    String   @default("pending") // pending, settled, cancelled
+  createdAt DateTime @default(now())
+  
+  // Relations
+  expense   Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_splits")
+}
+
+model Settlement {
+  id              String   @id @default(uuid())
+  fromUserId      String
+  toUserId        String
+  amount          Float
+  status          String   @default("pending") // pending, completed, failed
+  piTransactionId String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+  
+  // Relations
+  fromUser        User     @relation("Payer", fields: [fromUserId], references: [id])
+  toUser          User     @relation("Payee", fields: [toUserId], references: [id])
+
+  @@map("settlements")
+}
+
+model Connection {
+  id           String   @id @default(uuid())
+  fromUserId   String
+  toUserId     String
+  method       String   // qr_code, invite_link, group_join
+  status       String   @default("active") // active, blocked
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  fromUser     User     @relation("ConnectionsFrom", fields: [fromUserId], references: [id])
+  toUser       User     @relation("ConnectionsTo", fields: [toUserId], references: [id])
+
+  @@unique([fromUserId, toUserId])
+  @@map("connections")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  coverImage  String?
+  type        String   @default("general") // general, trip, household, event
+  settings    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  members     GroupMember[]
+  expenses    Expense[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id          String   @id @default(uuid())
+  groupId     String
+  userId      String
+  displayName String?  // Anonymous name within group
+  role        String   @default("member") // admin, member
+  joinedAt    DateTime @default(now())
+  
+  // Relations
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String   // expense_added, payment_sent, group_joined, achievement_earned
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("activities")
+}
+
+model Achievement {
+  id          String @id @default(uuid())
+  key         String @unique
+  name        String
+  description String
+  icon        String
+  rarity      String @default("common") // common, uncommon, rare, epic, legendary
+  piReward    Int    @default(0)
+  
+  // Relations
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String    @id @default(uuid())
+  userId        String
+  achievementId String
+  earnedAt      DateTime  @default(now())
+  
+  // Relations
+  user          User        @relation(fields: [userId], references: [id])
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
