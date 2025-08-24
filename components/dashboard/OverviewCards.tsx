@@ -1,4 +1,5 @@
 'use client'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   ArrowTrendingUpIcon, 
@@ -6,51 +7,98 @@ import {
   CurrencyDollarIcon,
   ScaleIcon 
 } from '@heroicons/react/24/outline'
+interface OverviewData {
+  totalOwed: number
+  totalOwing: number
+  netBalance: number
+  piBalance: number
+  owedChange: number
+  owingChange: number
+}
 
-const overviewData = [
-  {
-    title: 'Total You Owe',
-    amount: '142.50',
-    currency: 'π',
-    change: '+12.5%',
-    changeType: 'increase' as const,
-    icon: ArrowTrendingDownIcon,
-    color: 'from-red-500 to-pink-500',
-    bgColor: 'from-red-500/20 to-pink-500/20',
-  },
-  {
-    title: 'Total Owed to You',
-    amount: '287.30',
-    currency: 'π',
-    change: '+8.2%',
-    changeType: 'increase' as const,
-    icon: ArrowTrendingUpIcon,
-    color: 'from-green-500 to-emerald-500',
-    bgColor: 'from-green-500/20 to-emerald-500/20',
-  },
-  {
-    title: 'Net Balance',
-    amount: '144.80',
-    currency: 'π',
-    change: 'You\'re owed',
-    changeType: 'positive' as const,
-    icon: ScaleIcon,
-    color: 'from-blue-500 to-cyan-500',
-    bgColor: 'from-blue-500/20 to-cyan-500/20',
-  },
-  {
-    title: 'Pi Token Balance',
-    amount: '1,250.00',
-    currency: 'π',
-    change: 'Available',
-    changeType: 'neutral' as const,
-    icon: CurrencyDollarIcon,
-    color: 'from-purple-500 to-indigo-500',
-    bgColor: 'from-purple-500/20 to-indigo-500/20',
-  },
-]
+interface OverviewCardsProps {
+  data?: OverviewData
+  loading?: boolean
+  piBalance?:number
+}
 
-export const OverviewCards = () => {
+export const OverviewCards = ({ data, loading,piBalance }: OverviewCardsProps) => {
+  console.log(piBalance)
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount)
+  }
+
+  const formatChange = (change: number) => {
+    if (change === 0) return 'No change'
+    const sign = change > 0 ? '+' : ''
+    return `${sign}${change.toFixed(1)}%`
+  }
+
+  // Create dynamic overview data
+  const overviewData = data ? [
+    {
+      title: 'Total You Owe',
+      amount: formatAmount(data.totalOwed),
+      currency: 'π',
+      change: formatChange(data.owedChange),
+      changeType: data.owedChange > 0 ? 'increase' : data.owedChange < 0 ? 'decrease' : 'neutral',
+      icon: ArrowTrendingDownIcon,
+      color: 'from-red-500 to-pink-500',
+      bgColor: 'from-red-500/20 to-pink-500/20',
+    },
+    {
+      title: 'Total Owed to You',
+      amount: formatAmount(data.totalOwing),
+      currency: 'π',
+      change: formatChange(data.owingChange),
+      changeType: data.owingChange > 0 ? 'increase' : data.owingChange < 0 ? 'decrease' : 'neutral',
+      icon: ArrowTrendingUpIcon,
+      color: 'from-green-500 to-emerald-500',
+      bgColor: 'from-green-500/20 to-emerald-500/20',
+    },
+    {
+      title: 'Net Balance',
+      amount: formatAmount(data.netBalance),
+      currency: 'π',
+      change: data.netBalance > 0 ? 'You\'re owed' : data.netBalance < 0 ? 'You owe' : 'Even',
+      changeType: data.netBalance > 0 ? 'positive' : data.netBalance < 0 ? 'negative' : 'neutral',
+      icon: ScaleIcon,
+      color: 'from-blue-500 to-cyan-500',
+      bgColor: 'from-blue-500/20 to-cyan-500/20',
+    },
+    {
+      title: 'Pi Token Balance',
+      amount: formatAmount(data.piBalance),
+      currency: 'π',
+      change: 'Available',
+      changeType: 'neutral' as const,
+      icon: CurrencyDollarIcon,
+      color: 'from-purple-500 to-indigo-500',
+      bgColor: 'from-purple-500/20 to-indigo-500/20',
+    },
+  ] : []
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[...Array(4)].map((_, index) => (
+          <div
+            key={index}
+            className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 animate-pulse"
+          >
+            <div className="w-12 h-12 bg-white/10 rounded-xl mb-4"></div>
+            <div className="h-4 bg-white/10 rounded mb-2 w-3/4"></div>
+            <div className="h-8 bg-white/10 rounded mb-2"></div>
+            <div className="h-3 bg-white/10 rounded w-1/2"></div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {overviewData.map((item, index) => {
@@ -89,10 +137,11 @@ export const OverviewCards = () => {
 
               {/* Change indicator */}
               <div className={`text-sm font-medium ${
-                item.changeType === 'increase' ? 'text-green-400' :
+                item.changeType === 'increase' ? 'text-red-400' :
+                item.changeType === 'decrease' ? 'text-green-400' :
                 item.changeType === 'positive' ? 'text-blue-400' :
-                item.changeType === 'neutral' ? 'text-purple-400' :
-                'text-gray-400'
+                item.changeType === 'negative' ? 'text-red-400' :
+                'text-purple-400'
               }`}>
                 {item.change}
               </div>

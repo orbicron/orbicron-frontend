@@ -16,7 +16,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
-  // Relations
+  // Relations - These are fine and efficient
   expenses      Expense[]
   expenseSplits ExpenseSplit[]
   settlementsAsPayer Settlement[] @relation("Payer")
@@ -27,8 +27,13 @@ model User {
   activities      Activity[]
   achievements    UserAchievement[]
 
+  // Add indexes for performance
+  @@index([piUserId])
+  @@index([createdAt])
+  @@index([displayId])
   @@map("users")
 }
+
 
 model Expense {
   id          String    @id @default(uuid())
