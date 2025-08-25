@@ -8,6 +8,11 @@ import {
   QrCodeIcon,
   MicrophoneIcon
 } from '@heroicons/react/24/outline'
+import { useState } from 'react'
+
+let highOrder = (callback:any)=>{
+   callback(true)
+}
 
 const quickActions = [
   {
@@ -15,7 +20,7 @@ const quickActions = [
     description: 'Split a new expense',
     icon: PlusIcon,
     color: 'from-purple-500 to-indigo-500',
-    action: () => console.log('Add expense'),
+    action: (callback:any)=>highOrder(callback),
   },
   {
     title: 'Scan Receipt',
@@ -44,17 +49,11 @@ const quickActions = [
     icon: QrCodeIcon,
     color: 'from-orange-500 to-amber-500',
     action: () => console.log('Join group'),
-  },
-  {
-    title: 'Voice Command',
-    description: 'Add expense by voice',
-    icon: MicrophoneIcon,
-    color: 'from-teal-500 to-green-500',
-    action: () => console.log('Voice command'),
-  },
+  }
 ]
 
 export const QuickActions = () => {
+  const [showAddExpense, setShowAddExpense] = useState(false)
   return (
     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6">
       <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
@@ -71,7 +70,7 @@ export const QuickActions = () => {
               transition={{ duration: 0.3, delay: index * 0.1 }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={action.action}
+              onClick={action.title=='Add Expense'?setShowAddExpense(true):action.action}
               className="group relative p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300"
             >
               {/* Background gradient on hover */}
