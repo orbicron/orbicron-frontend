@@ -14,7 +14,7 @@ export const DashboardHeader = () => {
   const { user, logout } = useAuthStore()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-
+  console.log("this is the user i dont",user)
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

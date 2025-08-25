@@ -22,9 +22,9 @@ export const usePiSDK = () => {
                     })
                     setPiSDK(window.Pi)
                     setIsInitialized(true)
-                    console.log('Pi SDK initialized successfully')
+                    // console.log('Pi SDK initialized successfully')
                 } catch (error) {
-                    console.error('Pi SDK initialization failed:', error)
+                    // console.error('Pi SDK initialization failed:', error)
                 }
             }
 
@@ -44,6 +44,7 @@ export const usePiSDK = () => {
         try {
             const scopes = ['username', 'payments']
             const authResult = await piSDK.authenticate(scopes, onIncompletePaymentFound)
+            console.log("this is the authresult", authResult)
             setUser(authResult.user)
             localStorage.setItem('pi_user', JSON.stringify(authResult.user))
             localStorage.setItem('pi_access_token', authResult.accessToken)
@@ -55,7 +56,7 @@ export const usePiSDK = () => {
     }
 
     const onIncompletePaymentFound = (payment: any) => {
-        console.log('Incomplete payment found:', payment)
+        // console.log('Incomplete payment found:', payment)
         return piSDK.completePayment(payment.identifier)
     }
 
