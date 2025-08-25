@@ -1,36 +1,9 @@
 // lib/dashboard.ts
 import { prisma } from './prisma'
 
-// Pi balance fetching function
-export const getPiBalance = async (accessToken: string) => {
-    try {
-        const response = await fetch('https://api.minepi.com/v2/me/balance', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            }
-        })
-        console.log("user balence fetched with a api call", response)
-        if (response.ok) {
-            const balanceData = await response.json()
-            return {
-                available: balanceData.available || 0,
-                locked: balanceData.locked || 0,
-                total: (balanceData.available || 0) + (balanceData.locked || 0)
-            }
-        } else {
-            console.error('Failed to fetch Pi balance:', response.status)
-            return { available: 0, locked: 0, total: 0 }
-        }
-    } catch (error) {
-        console.error('Pi balance fetch error:', error)
-        return { available: 0, locked: 0, total: 0 }
-    }
-}
-
 export const getDashboardData = async (userId: string, accessToken?: string) => {
     try {
-        const [user, totalOwed, totalOwing, recentExpenses, recentActivity, piBalance] = await Promise.all([
+        const [user, totalOwed, totalOwing, recentExpenses, recentActivity] = await Promise.all([
             // User info
             prisma.user.findUnique({
                 where: { id: userId },
@@ -132,9 +105,6 @@ export const getDashboardData = async (userId: string, accessToken?: string) => 
                     createdAt: true
                 }
             }),
-
-            // Fetch Pi balance if access token provided
-            accessToken ? getPiBalance(accessToken) : null
         ])
 
         // Calculate previous period data for comparison (simplified)
@@ -172,15 +142,12 @@ export const getDashboardData = async (userId: string, accessToken?: string) => 
                 totalOwed: currentOwed,
                 totalOwing: currentOwing,
                 netBalance: currentOwing - currentOwed,
-                piBalance: piBalance?.available || 0,
-
                 // Calculate changes for better UX
                 owedChange: prevOwed > 0 ? ((currentOwed - prevOwed) / prevOwed) * 100 : 0,
                 owingChange: prevOwing > 0 ? ((currentOwing - prevOwing) / prevOwing) * 100 : 0
             },
             recentExpenses,
             recentActivity,
-            piBalance
         }
     } catch (error) {
         console.error('Dashboard data fetch error:', error)

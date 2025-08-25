@@ -9,6 +9,7 @@ import {
   BellIcon,
   ChevronDownIcon 
 } from '@heroicons/react/24/outline'
+import { WalletConnector } from '../wallet/WalletConnector'
 
 export const DashboardHeader = () => {
   const { user, logout } = useAuthStore()
@@ -52,6 +53,7 @@ export const DashboardHeader = () => {
 
           {/* Right side - Notifications and User Menu */}
           <div className="flex items-center gap-4">
+            <WalletConnector />
             {/* Notifications */}
             <button className="relative p-2 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-white/10">
               <BellIcon className="w-6 h-6" />

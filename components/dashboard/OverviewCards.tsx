@@ -1,5 +1,4 @@
 'use client'
-import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   ArrowTrendingUpIcon, 
@@ -7,6 +6,9 @@ import {
   CurrencyDollarIcon,
   ScaleIcon 
 } from '@heroicons/react/24/outline'
+import { useWalletStore } from '@/store/walletStore'
+import { format } from 'path'
+
 interface OverviewData {
   totalOwed: number
   totalOwing: number
@@ -23,7 +25,7 @@ interface OverviewCardsProps {
 }
 
 export const OverviewCards = ({ data, loading,piBalance }: OverviewCardsProps) => {
-  console.log(piBalance)
+  const { wallet, isConnected } = useWalletStore()
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
@@ -43,7 +45,7 @@ export const OverviewCards = ({ data, loading,piBalance }: OverviewCardsProps) =
       title: 'Total You Owe',
       amount: formatAmount(data.totalOwed),
       currency: 'π',
-      change: formatChange(data.owedChange),
+      change: formatAmount(data.owedChange),
       changeType: data.owedChange > 0 ? 'increase' : data.owedChange < 0 ? 'decrease' : 'neutral',
       icon: ArrowTrendingDownIcon,
       color: 'from-red-500 to-pink-500',
@@ -71,9 +73,13 @@ export const OverviewCards = ({ data, loading,piBalance }: OverviewCardsProps) =
     },
     {
       title: 'Pi Token Balance',
-      amount: formatAmount(data.piBalance),
+      amount:  isConnected && wallet?.balance ? 
+        formatAmount(wallet.balance.total) : 
+        '---',
       currency: 'π',
-      change: 'Available',
+      change: isConnected ? 
+        `${formatAmount(wallet?.balance?.available || 0)} available` : 
+        'Connect wallet to view',
       changeType: 'neutral' as const,
       icon: CurrencyDollarIcon,
       color: 'from-purple-500 to-indigo-500',
