@@ -136,6 +136,7 @@ export const ExpenseHeader = () => {
       <AddExpenseModal 
         isOpen={showAddModal} 
         onClose={() => setShowAddModal(false)} 
+        onSuccess={()=>{console.log("helo")}}
       />
       <ReceiptScannerModal 
         isOpen={showScannerModal} 

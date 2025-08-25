@@ -6,21 +6,33 @@ import {
   BanknotesIcon,
   UserGroupIcon,
   QrCodeIcon,
-  MicrophoneIcon
+  MicrophoneIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline'
 import { useState } from 'react'
-
+import { AddExpenseModal } from '../expenses/AddExpenseModal'
+import { QuickPay } from '@/components/payments/QuickPay'
 let highOrder = (callback:any)=>{
    callback(true)
 }
 
-const quickActions = [
+export const QuickActions = () => {
+  const [showAddExpense, setShowAddExpense] = useState(false)
+  const [showQuickPay, setShowQuickPay] = useState(false)
+  const quickActions = [
+    {
+    title: 'Quick Pay',
+    description: 'Scan to Pay',
+    icon: QrCodeIcon,
+    color: 'from-purple-500 to-indigo-500',
+    action: () => setShowQuickPay(true),
+  },
   {
     title: 'Add Expense',
     description: 'Split a new expense',
     icon: PlusIcon,
     color: 'from-purple-500 to-indigo-500',
-    action: (callback:any)=>highOrder(callback),
+    action: ()=>{setShowAddExpense(true)},
   },
   {
     title: 'Scan Receipt',
@@ -46,15 +58,13 @@ const quickActions = [
   {
     title: 'Join Group',
     description: 'Scan QR code',
-    icon: QrCodeIcon,
+    icon: CreditCardIcon,
     color: 'from-orange-500 to-amber-500',
     action: () => console.log('Join group'),
   }
 ]
-
-export const QuickActions = () => {
-  const [showAddExpense, setShowAddExpense] = useState(false)
   return (
+    <>
     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6">
       <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
       
@@ -70,7 +80,7 @@ export const QuickActions = () => {
               transition={{ duration: 0.3, delay: index * 0.1 }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={action.title=='Add Expense'?setShowAddExpense(true):action.action}
+              onClick={action.action}
               className="group relative p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300"
             >
               {/* Background gradient on hover */}
@@ -95,7 +105,23 @@ export const QuickActions = () => {
             </motion.button>  
           )
         })}
+        
       </div>
     </div>
+    <AddExpenseModal
+        isOpen={showAddExpense}
+        onClose={()=>{setShowAddExpense(false)}}
+        onSuccess={()=>{console.log("close successfull")}}
+        />
+        <QuickPay
+        isOpen={showQuickPay}
+        onClose={() => setShowQuickPay(false)}
+        onPaymentSuccess={() => {
+          // Refresh dashboard or show success message
+          window.location.reload()
+        }}
+      />
+        </>
+        
   )
 }

@@ -186,7 +186,7 @@ export const AddExpenseModal = ({ isOpen, onClose, onSuccess }: AddExpenseModalP
               animate="visible"
               exit="exit"
               className={`
-                w-full max-w-2xl mx-auto bg-slate-900/95 backdrop-blur-md border border-white/20 shadow-2xl
+                w-full max-w-2xl mx-auto bg-slate-900/95 backdrop-blur-md border border-white/20 shadow-2xl z-1000
                 ${isMobile 
                   ? 'rounded-t-3xl h-[90vh] max-h-[90vh] overflow-y-auto' 
                   : 'rounded-2xl max-h-[85vh] overflow-y-auto'

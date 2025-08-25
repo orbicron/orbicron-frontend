@@ -39,7 +39,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-
   // Fetch dashboard data
   const fetchDashboardData = async () => {
     if (!isAuthenticated) return
@@ -208,7 +207,7 @@ export default function DashboardPage() {
         <OverviewCards 
           data={data?.financialSummary} 
           loading={loading}
-           piBalance={ data?.piBalance}
+          
         />
       </motion.div>
 
