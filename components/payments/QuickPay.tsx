@@ -1,5 +1,4 @@
-// components/payments/QuickPay.tsx - Updated with URL parsing and editable address
-
+// components/payments/QuickPay.tsx - Complete version with Pi SDK integration
 'use client'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,7 +11,9 @@ import {
   KeyIcon,
   ArrowRightIcon,
   ArrowLeftIcon,
-  PencilIcon
+  PencilIcon,
+  ClipboardDocumentIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import { useApiClient } from '@/hooks/useApiClient'
 
@@ -37,6 +38,35 @@ interface QuickPayProps {
 
 type PaymentStage = 'scan' | 'details' | 'confirm' | 'success'
 
+interface SuccessData {
+  paymentId?: string
+  piTransactionId?: string
+  piTransactionHash?: string
+  status?: string
+  settlementId?: string
+}
+
+// 🆕 Declare Pi SDK types
+declare global {
+  interface Window {
+    Pi: {
+      createPayment: (
+        paymentData: {
+          amount: number
+          memo: string
+          metadata: any
+        },
+        callbacks: {
+          onReadyForServerApproval: (paymentId: string) => void
+          onReadyForServerCompletion: (paymentId: string, txid: string) => void
+          onCancel: (paymentId: string) => void
+          onError: (error: any, payment?: any) => void
+        }
+      ) => void
+    }
+  }
+}
+
 export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) => {
   const { apiCall } = useApiClient()
   
@@ -51,11 +81,14 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
   const [currency, setCurrency] = useState('PI')
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
+  const [successData, setSuccessData] = useState<SuccessData | null>(null)
   
   // UI state
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+  const [currentPaymentId, setCurrentPaymentId] = useState<string | null>(null)
 
   // Check if mobile
   useEffect(() => {
@@ -75,14 +108,18 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
       setAmount('')
       setCategory('')
       setDescription('')
+      setSuccessData(null)
       setError(null)
+      setCopied(null)
+      setCurrentPaymentId(null)
     }
   }, [isOpen])
 
-  // 🆕 Parse Pi Network payment URL
+  // Parse Pi Network payment URL
   const parsePaymentUrl = (url: string): string | null => {
     try {
-      // Handle Pi Network payment URL format: https://wallet.pinet.com/pay-request?publicKey=...
+      console.log('Parsing URL:', url)
+      
       if (url.includes('wallet.pinet.com/pay-request') || url.includes('pi.network/pay')) {
         const urlObj = new URL(url)
         const publicKey = urlObj.searchParams.get('publicKey')
@@ -93,18 +130,15 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
         }
       }
       
-      // If it's already a public key (starts with G and is long enough)
       if (url.match(/^G[A-Z0-9]{55}$/)) {
         return url
       }
       
-      // Try to extract any parameter that looks like a public key
       const publicKeyMatch = url.match(/publicKey=([A-Z0-9]+)/i)
       if (publicKeyMatch) {
         return publicKeyMatch[1]
       }
       
-      // Return the original if it looks like a wallet address
       if (url.length > 20 && url.match(/^[A-Za-z0-9]+$/)) {
         return url
       }
@@ -116,7 +150,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     }
   }
 
-  // 🆕 Enhanced QR scan success handler
+  // QR scan success handler
   const handleScanSuccess = (err: any, result?: { text: string }) => {
     if (result?.text) {
       console.log('Raw QR scan result:', result.text)
@@ -138,11 +172,11 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
   // Handle manual address input
   const handleAddressChange = (value: string) => {
-    setReceiverAddress(value)
+    setReceiverAddress(value.trim())
     setError(null)
   }
 
-  // Move to payment details stage
+  // Navigate between stages
   const goToDetailsStage = () => {
     if (!receiverAddress.trim()) {
       setError('Please enter a wallet address or scan QR code')
@@ -152,17 +186,19 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     setScannerActive(false)
   }
 
-  // Move to confirmation stage
   const goToConfirmStage = () => {
     if (!amount || Number(amount) <= 0) {
       setError('Please enter a valid amount')
+      return
+    }
+    if (!receiverAddress.trim()) {
+      setError('Please provide a receiver address')
       return
     }
     setCurrentStage('confirm')
     setError(null)
   }
 
-  // Go back to previous stage
   const goBack = () => {
     setError(null)
     switch (currentStage) {
@@ -174,55 +210,171 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
       case 'confirm':
         setCurrentStage('details')
         break
+      case 'success':
+        setCurrentStage('confirm')
+        break
       default:
         break
     }
   }
 
-  // 🆕 Handle address editing in details stage
+  // Handle address editing
   const toggleAddressEdit = () => {
     setIsEditingAddress(!isEditingAddress)
     setError(null)
   }
 
-  // Process payment
+  // Copy to clipboard
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(type)
+      setTimeout(() => setCopied(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+    }
+  }
+
+  // 🆕 Pi SDK Payment Implementation
   const processPayment = async () => {
+    if (!window.Pi) {
+      setError('Pi Network is not available. Please use Pi Browser.')
+      return
+    }
+
     setPaymentProcessing(true)
     setError(null)
 
     try {
-      const response = await apiCall('/api/payments', {
-        method: 'POST',
-        body: JSON.stringify({
+      console.log('Creating Pi payment with SDK...')
+
+      // 🆕 Use Pi SDK createPayment method
+      window.Pi.createPayment({
+        amount: Number(amount),
+        memo: `Payment to ${receiverAddress.slice(0, 8)}...${receiverAddress.slice(-8)}`,
+        metadata: {
           receiverPublicKey: receiverAddress,
-          amount: Number(amount),
-          currency,
           category: category || null,
           description: description || null,
-          paymentType: 'quick_pay'
-        })
+          paymentType: 'quick_pay',
+          currency: currency
+        }
+      }, {
+        // 🆕 Pi SDK Callbacks
+        onReadyForServerApproval: async (paymentId: string) => {
+          console.log('Payment ready for server approval:', paymentId)
+          setCurrentPaymentId(paymentId)
+          
+          try {
+            // Send to backend for approval
+            const response = await apiCall('/api/payments/approve', {
+              method: 'POST',
+              body: JSON.stringify({
+                paymentId,
+                receiverPublicKey: receiverAddress,
+                amount: Number(amount),
+                currency,
+                category: category || null,
+                description: description || null,
+                paymentType: 'quick_pay'
+              })
+            })
+
+            const result = await response.json()
+            
+            if (!response.ok) {
+              throw new Error(result.error || 'Payment approval failed')
+            }
+
+            console.log('Payment approved by server:', result)
+
+          } catch (error:any) {
+            console.error('Server approval error:', error)
+            setError(`Payment approval failed: ${error.message}`)
+            setPaymentProcessing(false)
+          }
+        },
+
+        onReadyForServerCompletion: async (paymentId: string, txid: string) => {
+          console.log('Payment ready for server completion:', paymentId, txid)
+          
+          try {
+            // Complete payment on backend
+            const response = await apiCall('/api/payments/complete', {
+              method: 'POST',
+              body: JSON.stringify({
+                paymentId,
+                txid,
+                receiverPublicKey: receiverAddress,
+                amount: Number(amount),
+                currency
+              })
+            })
+
+            const result = await response.json()
+            
+            if (response.ok) {
+              console.log('Payment completed successfully:', result)
+              
+              // Show success
+              setSuccessData({
+                paymentId,
+                piTransactionId: paymentId,
+                piTransactionHash: txid,
+                status: 'completed',
+                settlementId: result.settlement?.id
+              })
+              
+              setPaymentProcessing(false)
+              setCurrentStage('success')
+              
+              // Store transaction details
+              localStorage.setItem('lastPiTransaction', JSON.stringify({
+                paymentId,
+                piTransactionId: paymentId,
+                piTransactionHash: txid,
+                amount: amount,
+                currency: currency,
+                receiverPublicKey: receiverAddress,
+                timestamp: new Date().toISOString(),
+                status: 'completed'
+              }))
+              
+              // Auto close after success
+              setTimeout(() => {
+                handleClose()
+                if (onPaymentSuccess) onPaymentSuccess()
+              }, 8000)
+              
+            } else {
+              throw new Error(result.error || 'Payment completion failed')
+            }
+
+          } catch (error:any) {
+            console.error('Server completion error:', error)
+            setError(`Payment completion failed: ${error.message}`)
+            setPaymentProcessing(false)
+          }
+        },
+
+        onCancel: (paymentId: string) => {
+          console.log('Payment cancelled:', paymentId)
+          setError('Payment was cancelled by user')
+          setPaymentProcessing(false)
+          setCurrentPaymentId(null)
+        },
+
+        onError: (error: any, payment?: any) => {
+          console.error('Pi payment error:', error, payment)
+          setError(`Payment failed: ${error.message || 'Unknown error'}`)
+          setPaymentProcessing(false)
+          setCurrentPaymentId(null)
+        }
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Payment processed:', result)
-        
-        setPaymentProcessing(false)
-        setCurrentStage('success')
-        
-        // Auto close after success
-        setTimeout(() => {
-          handleClose()
-          if (onPaymentSuccess) onPaymentSuccess()
-        }, 3000)
-      } else {
-        const errorData = await response.json()
-        setError(errorData.error || 'Payment failed')
-        setPaymentProcessing(false)
-      }
     } catch (err: any) {
-      console.error('Payment error:', err)
-      setError('Network error. Please try again.')
+      console.error('Payment creation error:', err)
+      setError('Failed to create payment. Please try again.')
       setPaymentProcessing(false)
     }
   }
@@ -237,8 +389,11 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     setCurrency('PI')
     setCategory('')
     setDescription('')
+    setSuccessData(null)
     setPaymentProcessing(false)
     setError(null)
+    setCopied(null)
+    setCurrentPaymentId(null)
     onClose()
   }
 
@@ -301,7 +456,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
               <div className="sticky top-0 bg-slate-900/95 backdrop-blur-md border-b border-white/10 p-6 pb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {currentStage !== 'scan' && (
+                    {currentStage !== 'scan' && currentStage !== 'success' && (
                       <button
                         onClick={goBack}
                         className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
@@ -406,8 +561,8 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                             onClick={() => setScannerActive(!scannerActive)}
                             className={`px-4 py-2 rounded-lg font-medium transition-all ${
                               scannerActive
-                                ? 'bg-red-500/20 text-red-300 border border-red-300/30'
-                                : 'bg-green-500/20 text-green-300 border border-green-300/30'
+                                ? 'bg-red-500/20 text-red-300 border border-red-300/30 hover:bg-red-500/30'
+                                : 'bg-green-500/20 text-green-300 border border-green-300/30 hover:bg-green-500/30'
                             }`}
                           >
                             {scannerActive ? 'Stop Scanner' : 'Start Scanner'}
@@ -451,19 +606,18 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         {receiverAddress && (
                           <p className="text-green-400 text-sm mt-2 flex items-center gap-1">
                             <CheckCircleIcon className="w-4 h-4" />
-                            Wallet address detected
+                            Wallet address detected - Click arrow to continue
                           </p>
                         )}
                       </div>
 
                       {!receiverAddress && (
-                        <button
-                          onClick={goToDetailsStage}
-                          disabled
-                          className="w-full py-3 bg-gray-600 text-gray-400 rounded-xl font-semibold cursor-not-allowed"
-                        >
-                          Enter wallet address to continue
-                        </button>
+                        <div className="bg-blue-500/10 border border-blue-300/20 rounded-xl p-4">
+                          <div className="flex items-center gap-2 text-blue-300 text-sm">
+                            <ExclamationTriangleIcon className="w-4 h-4" />
+                            <span>Scan a Pi Network QR code or enter a wallet address to continue</span>
+                          </div>
+                        </div>
                       )}
                     </motion.div>
                   )}
@@ -478,13 +632,13 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                       exit="exit"
                       className="space-y-6"
                     >
-                      {/* 🆕 Editable Receiver Info */}
+                      {/* Editable Receiver Info */}
                       <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-sm text-gray-400">Sending to:</p>
                           <button
                             onClick={toggleAddressEdit}
-                            className="flex items-center gap-1 text-green-400 hover:text-green-300 text-sm"
+                            className="flex items-center gap-1 text-green-400 hover:text-green-300 text-sm transition-colors"
                           >
                             <PencilIcon className="w-4 h-4" />
                             Edit
@@ -509,7 +663,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                                 Save
                               </button>
                               <button
-                                onClick={toggleAddressEdit}
+                                onClick={() => setIsEditingAddress(false)}
                                 className="px-3 py-1 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700 transition-colors"
                               >
                                 Cancel
@@ -550,8 +704,8 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                             onChange={(e) => setCurrency(e.target.value)}
                             className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300 appearance-none cursor-pointer"
                           >
-                            <option value="PI" className="bg-slate-800">π</option>
-                            <option value="USD" className="bg-slate-800">$</option>
+                            <option value="PI" className="bg-slate-800">π Pi</option>
+                            <option value="USD" className="bg-slate-800">$ USD</option>
                           </select>
                         </div>
                       </div>
@@ -586,7 +740,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
                       <button
                         onClick={goToConfirmStage}
-                        disabled={!amount || Number(amount) <= 0 || !receiverAddress}
+                        disabled={!amount || Number(amount) <= 0 || !receiverAddress.trim()}
                         className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Review Payment
@@ -594,7 +748,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                     </motion.div>
                   )}
 
-                  {/* Stage 3: Confirmation - Same as before */}
+                  {/* Stage 3: Confirmation */}
                   {currentStage === 'confirm' && (
                     <motion.div
                       key="confirm"
@@ -610,9 +764,15 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         </div>
                         
                         <h3 className="text-2xl font-bold text-white mb-2">Confirm Payment</h3>
-                        <p className="text-gray-300">
+                        <p className="text-gray-300 mb-2">
                           Review your payment details before sending
                         </p>
+                        <div className="bg-blue-500/10 border border-blue-300/20 rounded-lg p-3">
+                          <p className="text-blue-300 text-sm flex items-center gap-2">
+                            <ExclamationTriangleIcon className="w-4 h-4" />
+                            This will create a Pi Network blockchain transaction
+                          </p>
+                        </div>
                       </div>
 
                       {/* Payment Summary */}
@@ -624,9 +784,16 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         
                         <div className="flex justify-between items-start py-3 border-b border-white/10">
                           <span className="text-gray-400">To</span>
-                          <span className="text-white font-mono text-sm text-right break-all">
-                            {receiverAddress}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-white font-mono text-sm break-all">
+                              {receiverAddress.slice(0, 20)}...{receiverAddress.slice(-20)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center py-3 border-b border-white/10">
+                          <span className="text-gray-400">Network</span>
+                          <span className="text-blue-400 font-semibold">Pi Network</span>
                         </div>
 
                         {category && (
@@ -639,7 +806,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         {description && (
                           <div className="flex justify-between items-start py-3">
                             <span className="text-gray-400">Note</span>
-                            <span className="text-white text-right">{description}</span>
+                            <span className="text-white text-right max-w-xs">{description}</span>
                           </div>
                         )}
                       </div>
@@ -652,7 +819,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         {paymentProcessing ? (
                           <div className="flex items-center justify-center gap-3">
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            Processing Payment...
+                            Creating Pi Payment...
                           </div>
                         ) : (
                           `Send ${amount} ${currency}`
@@ -661,7 +828,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                     </motion.div>
                   )}
 
-                  {/* Stage 4: Success - Same as before */}
+                  {/* Stage 4: Success with Transaction Details */}
                   {currentStage === 'success' && (
                     <motion.div
                       key="success"
@@ -681,11 +848,76 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                       </motion.div>
                       
                       <h3 className="text-3xl font-bold text-white mb-4">Payment Successful!</h3>
-                      <p className="text-gray-300 mb-2">Your payment has been sent successfully</p>
-                      <p className="text-green-400 font-semibold">{amount} {currency} sent</p>
+                      <p className="text-gray-300 mb-4">Your payment has been processed on Pi Network</p>
+                      <p className="text-green-400 font-semibold mb-6">{amount} {currency} sent</p>
                       
-                      <div className="mt-8 text-sm text-gray-400">
-                        This window will close automatically...
+                      {/* Transaction Details */}
+                      {successData && (
+                        <div className="bg-white/5 rounded-xl p-6 mb-6 text-left max-w-lg mx-auto">
+                          <h4 className="text-white font-semibold mb-4 text-center">Transaction Details</h4>
+                          <div className="space-y-4">
+                            {successData.paymentId && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-400 text-sm">Payment ID:</span>
+                                  <button
+                                    onClick={() => copyToClipboard(successData.paymentId!, 'paymentId')}
+                                    className="flex items-center gap-1 text-green-400 hover:text-green-300 text-xs"
+                                  >
+                                    <ClipboardDocumentIcon className="w-3 h-3" />
+                                    {copied === 'paymentId' ? 'Copied!' : 'Copy'}
+                                  </button>
+                                </div>
+                                <div className="bg-white/5 rounded p-2">
+                                  <p className="text-white font-mono text-xs break-all">
+                                    {successData.paymentId}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {successData.piTransactionHash && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-400 text-sm">Transaction Hash:</span>
+                                  <button
+                                    onClick={() => copyToClipboard(successData.piTransactionHash!, 'hash')}
+                                    className="flex items-center gap-1 text-green-400 hover:text-green-300 text-xs"
+                                  >
+                                    <ClipboardDocumentIcon className="w-3 h-3" />
+                                    {copied === 'hash' ? 'Copied!' : 'Copy'}
+                                  </button>
+                                </div>
+                                <div className="bg-white/5 rounded p-2">
+                                  <p className="text-white font-mono text-xs break-all">
+                                    {successData.piTransactionHash}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                              <div className="flex justify-between">
+                                <span className="text-gray-400 text-sm">Status:</span>
+                                <span className="text-green-400 font-semibold text-sm">
+                                  Completed
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400 text-sm">Network:</span>
+                                <span className="text-blue-400 text-sm font-semibold">Pi Network</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="text-sm text-gray-400 mb-4">
+                        ✅ Transaction confirmed on Pi blockchain
+                      </div>
+
+                      <div className="text-xs text-gray-500">
+                        This window will close automatically in a few seconds...
                       </div>
                     </motion.div>
                   )}
@@ -698,7 +930,10 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                     animate={{ opacity: 1, y: 0 }}
                     className="mt-6 bg-red-500/10 border border-red-300/20 rounded-xl p-4"
                   >
-                    <p className="text-red-400 text-sm">{error}</p>
+                    <div className="flex items-center gap-2">
+                      <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
                   </motion.div>
                 )}
               </div>

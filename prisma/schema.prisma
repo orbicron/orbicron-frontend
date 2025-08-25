@@ -72,19 +72,22 @@ model ExpenseSplit {
 }
 
 model Settlement {
-  id              String   @id @default(uuid())
-  fromUserId      String
-  toUserId        String
-  amount          Float
-  status          String   @default("pending") // pending, completed, failed
-  piTransactionId String?
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  completedAt     DateTime?
+  id                    String   @id @default(uuid())
+  fromUserId            String
+  toUserId              String?   // ✅ Make optional - we might not know receiver's internal ID
+  receiverPublicKey     String?   // ✅ Store the Pi public key for external transfers
+  amount                Float
+  status                String   @default("pending") // pending, completed, failed
+  piTransactionId       String?
+  piTransactionHash     String?   // ✅ Add blockchain transaction hash
+  blockchainNetwork     String   @default("testnet") // testnet, mainnet
+  metadata              Json?
+  createdAt             DateTime @default(now())
+  completedAt           DateTime?
   
-  // Relations
-  fromUser        User     @relation("Payer", fields: [fromUserId], references: [id])
-  toUser          User     @relation("Payee", fields: [toUserId], references: [id])
+  // Relations - Updated to be optional
+  fromUser              User     @relation("Payer", fields: [fromUserId], references: [id])
+  toUser                User?    @relation("Payee", fields: [toUserId], references: [id])
 
   @@map("settlements")
 }
