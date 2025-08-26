@@ -49,10 +49,8 @@ export default function DashboardPage() {
       
       if (response.ok) {
         const result = await response.json()
-        console.log("this is the result with pi balence",result)
         setData(result.data)
         setLastRefresh(new Date())
-        console.log('Dashboard data loaded:', result.data)
       } else {
         throw new Error(`Failed to fetch dashboard data: ${response.status}`)
       }

@@ -1,4 +1,4 @@
-// components/payments/QuickPay.tsx - Complete version with Pi SDK integration
+// components/payments/QuickPay.tsx - Complete version with authentication and error handling
 'use client'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -50,6 +50,8 @@ interface SuccessData {
 declare global {
   interface Window {
     Pi: {
+      init: (config: { version: string; sandbox?: boolean }) => void
+      authenticate: (scopes: string[], onIncompletePaymentFound: (payment: any) => void) => Promise<any>
       createPayment: (
         paymentData: {
           amount: number
@@ -73,6 +75,11 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
   // Stage management
   const [currentStage, setCurrentStage] = useState<PaymentStage>('scan')
   
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [piUser, setPiUser] = useState<any>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  
   // Form state
   const [scannerActive, setScannerActive] = useState(true)
   const [receiverAddress, setReceiverAddress] = useState('')
@@ -82,7 +89,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [successData, setSuccessData] = useState<SuccessData | null>(null)
-  
+  const [accessToken,setAccessToken] = useState()
   // UI state
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,6 +104,43 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // 🆕 Authenticate with Pi Network when modal opens
+  useEffect(() => {
+    const authenticateWithPi = async () => {
+      if (!window.Pi) {
+        setAuthError('Pi Network SDK not available. Please use Pi Browser.')
+        return
+      }
+
+      try {
+        console.log('Authenticating with Pi Network...')
+        
+        // Initialize Pi SDK
+        window.Pi.init({ version: "2.0", sandbox: true })
+        const auth = await window.Pi.authenticate(['payments'], (payment:any) => {
+          console.log('Incomplete payment found:', payment)
+          // Handle incomplete payments
+          handleIncompletePayment(payment)
+        })
+        
+        console.log('Pi authentication successful:', auth)
+        setIsAuthenticated(true)
+        setPiUser(auth.user)
+        setAuthError(null)
+        setAccessToken(auth.accessToken)
+        
+      } catch (error: any) {
+        console.error('Pi authentication failed:', error)
+        setAuthError(`Authentication failed: ${error.message || 'Please ensure you are using Pi Browser with payments permission'}`)
+        setIsAuthenticated(false)
+      }
+    }
+
+    if (isOpen && !isAuthenticated) {
+      authenticateWithPi()
+    }
+  }, [isOpen])
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -114,6 +158,55 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
       setCurrentPaymentId(null)
     }
   }, [isOpen])
+
+  // Handle incomplete payments
+  const handleIncompletePayment = async (payment: any) => {
+    try {
+      // Send incomplete payment to backend for completion
+      await apiCall('/api/payments/complete', {
+        method: 'POST',
+        body: JSON.stringify({
+          paymentId: payment.identifier,
+          txid: payment.transaction?.txid
+        })
+      })
+    } catch (error) {
+      console.error('Failed to complete incomplete payment:', error)
+    }
+  }
+
+  // 🆕 Enhanced API call with better error handling
+  const safeApiCall = async (url: string, options: RequestInit) => {
+    try {
+       if (!accessToken) throw new Error('Access token required');
+        const headers = new Headers();
+    if (options.headers) {
+      Object.entries(options.headers).forEach(([key, value]) => {
+        headers.append(key, value as string);
+      });
+    }
+     headers.set('Content-Type', 'application/json');
+    headers.set('Authorization', `Bearer ${accessToken}`)
+      const response = await fetch(url, {
+        ...options,
+        headers
+      })
+
+       const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}...`);
+    }
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    return { response, data };
+  } catch (error: any) {
+    console.error('API call failed:', error);
+    throw error;
+  }
+  }
 
   // Parse Pi Network payment URL
   const parsePaymentUrl = (url: string): string | null => {
@@ -195,6 +288,10 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
       setError('Please provide a receiver address')
       return
     }
+    if (!isAuthenticated) {
+      setError('Please authenticate with Pi Network first')
+      return
+    }
     setCurrentStage('confirm')
     setError(null)
   }
@@ -235,10 +332,15 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     }
   }
 
-  // 🆕 Pi SDK Payment Implementation
+  // 🆕 Enhanced Pi SDK Payment Implementation
   const processPayment = async () => {
     if (!window.Pi) {
-      setError('Pi Network is not available. Please use Pi Browser.')
+      setError('Pi Network SDK is not available. Please use Pi Browser.')
+      return
+    }
+
+    if (!isAuthenticated) {
+      setError('Please authenticate with Pi Network first.')
       return
     }
 
@@ -246,7 +348,13 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     setError(null)
 
     try {
-      console.log('Creating Pi payment with SDK...')
+      console.log('Creating Pi payment with SDK...', {
+        amount: Number(amount),
+        receiverAddress,
+        currency,
+        category,
+        description
+      })
 
       // 🆕 Use Pi SDK createPayment method
       window.Pi.createPayment({
@@ -260,14 +368,14 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
           currency: currency
         }
       }, {
-        // 🆕 Pi SDK Callbacks
+        // 🆕 Pi SDK Callbacks with enhanced error handling
         onReadyForServerApproval: async (paymentId: string) => {
           console.log('Payment ready for server approval:', paymentId)
           setCurrentPaymentId(paymentId)
           
           try {
-            // Send to backend for approval
-            const response = await apiCall('/api/payments/approve', {
+            // Send to backend for approval with enhanced error handling
+            const { data } = await safeApiCall('/api/payments/approve', {
               method: 'POST',
               body: JSON.stringify({
                 paymentId,
@@ -280,15 +388,9 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
               })
             })
 
-            const result = await response.json()
-            
-            if (!response.ok) {
-              throw new Error(result.error || 'Payment approval failed')
-            }
+            console.log('Payment approved by server:', data)
 
-            console.log('Payment approved by server:', result)
-
-          } catch (error:any) {
+          } catch (error: any) {
             console.error('Server approval error:', error)
             setError(`Payment approval failed: ${error.message}`)
             setPaymentProcessing(false)
@@ -299,8 +401,8 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
           console.log('Payment ready for server completion:', paymentId, txid)
           
           try {
-            // Complete payment on backend
-            const response = await apiCall('/api/payments/complete', {
+            // Complete payment on backend with enhanced error handling
+            const { data } = await safeApiCall('/api/payments/complete', {
               method: 'POST',
               body: JSON.stringify({
                 paymentId,
@@ -311,46 +413,39 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
               })
             })
 
-            const result = await response.json()
+            console.log('Payment completed successfully:', data)
             
-            if (response.ok) {
-              console.log('Payment completed successfully:', result)
-              
-              // Show success
-              setSuccessData({
-                paymentId,
-                piTransactionId: paymentId,
-                piTransactionHash: txid,
-                status: 'completed',
-                settlementId: result.settlement?.id
-              })
-              
-              setPaymentProcessing(false)
-              setCurrentStage('success')
-              
-              // Store transaction details
-              localStorage.setItem('lastPiTransaction', JSON.stringify({
-                paymentId,
-                piTransactionId: paymentId,
-                piTransactionHash: txid,
-                amount: amount,
-                currency: currency,
-                receiverPublicKey: receiverAddress,
-                timestamp: new Date().toISOString(),
-                status: 'completed'
-              }))
-              
-              // Auto close after success
-              setTimeout(() => {
-                handleClose()
-                if (onPaymentSuccess) onPaymentSuccess()
-              }, 8000)
-              
-            } else {
-              throw new Error(result.error || 'Payment completion failed')
-            }
+            // Show success
+            setSuccessData({
+              paymentId,
+              piTransactionId: paymentId,
+              piTransactionHash: txid,
+              status: 'completed',
+              settlementId: data.settlement?.id
+            })
+            
+            setPaymentProcessing(false)
+            setCurrentStage('success')
+            
+            // Store transaction details
+            localStorage.setItem('lastPiTransaction', JSON.stringify({
+              paymentId,
+              piTransactionId: paymentId,
+              piTransactionHash: txid,
+              amount: amount,
+              currency: currency,
+              receiverPublicKey: receiverAddress,
+              timestamp: new Date().toISOString(),
+              status: 'completed'
+            }))
+            
+            // Auto close after success
+            setTimeout(() => {
+              handleClose()
+              if (onPaymentSuccess) onPaymentSuccess()
+            }, 8000)
 
-          } catch (error:any) {
+          } catch (error: any) {
             console.error('Server completion error:', error)
             setError(`Payment completion failed: ${error.message}`)
             setPaymentProcessing(false)
@@ -366,7 +461,15 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
         onError: (error: any, payment?: any) => {
           console.error('Pi payment error:', error, payment)
-          setError(`Payment failed: ${error.message || 'Unknown error'}`)
+          let errorMessage = 'Payment failed'
+          
+          if (error.message) {
+            errorMessage += `: ${error.message}`
+          } else if (typeof error === 'string') {
+            errorMessage += `: ${error}`
+          }
+          
+          setError(errorMessage)
           setPaymentProcessing(false)
           setCurrentPaymentId(null)
         }
@@ -374,7 +477,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
     } catch (err: any) {
       console.error('Payment creation error:', err)
-      setError('Failed to create payment. Please try again.')
+      setError(`Failed to create payment: ${err.message || 'Please try again'}`)
       setPaymentProcessing(false)
     }
   }
@@ -394,6 +497,9 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
     setError(null)
     setCopied(null)
     setCurrentPaymentId(null)
+    setIsAuthenticated(false)
+    setPiUser(null)
+    setAuthError(null)
     onClose()
   }
 
@@ -503,6 +609,25 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                     ))}
                   </div>
                 </div>
+
+                {/* 🆕 Authentication Status */}
+                {authError && (
+                  <div className="mt-4 bg-red-500/10 border border-red-300/20 rounded-lg p-3">
+                    <p className="text-red-400 text-sm flex items-center gap-2">
+                      <ExclamationTriangleIcon className="w-4 h-4" />
+                      {authError}
+                    </p>
+                  </div>
+                )}
+                
+                {isAuthenticated && piUser && (
+                  <div className="mt-4 bg-green-500/10 border border-green-300/20 rounded-lg p-3">
+                    <p className="text-green-300 text-sm flex items-center gap-2">
+                      <CheckCircleIcon className="w-4 h-4" />
+                      Authenticated as {piUser.username || 'Pi User'}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Content */}
@@ -740,10 +865,10 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
                       <button
                         onClick={goToConfirmStage}
-                        disabled={!amount || Number(amount) <= 0 || !receiverAddress.trim()}
+                        disabled={!amount || Number(amount) <= 0 || !receiverAddress.trim() || !isAuthenticated}
                         className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Review Payment
+                        {!isAuthenticated ? 'Authenticating...' : 'Review Payment'}
                       </button>
                     </motion.div>
                   )}
@@ -767,8 +892,26 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                         <p className="text-gray-300 mb-2">
                           Review your payment details before sending
                         </p>
+                        
+                        {/* Authentication Status */}
+                        {isAuthenticated && piUser ? (
+                          <div className="bg-green-500/10 border border-green-300/20 rounded-lg p-3 mb-4">
+                            <p className="text-green-300 text-sm flex items-center gap-2 justify-center">
+                              <CheckCircleIcon className="w-4 h-4" />
+                              Authenticated as {piUser.username || 'Pi User'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-yellow-500/10 border border-yellow-300/20 rounded-lg p-3 mb-4">
+                            <p className="text-yellow-300 text-sm flex items-center gap-2 justify-center">
+                              <ExclamationTriangleIcon className="w-4 h-4" />
+                              Authenticating with Pi Network...
+                            </p>
+                          </div>
+                        )}
+                        
                         <div className="bg-blue-500/10 border border-blue-300/20 rounded-lg p-3">
-                          <p className="text-blue-300 text-sm flex items-center gap-2">
+                          <p className="text-blue-300 text-sm flex items-center gap-2 justify-center">
                             <ExclamationTriangleIcon className="w-4 h-4" />
                             This will create a Pi Network blockchain transaction
                           </p>
@@ -813,7 +956,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
 
                       <button
                         onClick={processPayment}
-                        disabled={paymentProcessing}
+                        disabled={paymentProcessing || !isAuthenticated}
                         className="w-full py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold text-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {paymentProcessing ? (
@@ -821,6 +964,8 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                             Creating Pi Payment...
                           </div>
+                        ) : !isAuthenticated ? (
+                          'Authenticating with Pi Network...'
                         ) : (
                           `Send ${amount} ${currency}`
                         )}

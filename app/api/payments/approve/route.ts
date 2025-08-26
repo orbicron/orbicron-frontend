@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 export const POST = withAuth(async (req) => {
     try {
         const userId = req.user!.id
+        console.log(userId)
         const {
             paymentId,
             receiverPublicKey,
@@ -24,24 +25,6 @@ export const POST = withAuth(async (req) => {
             )
         }
 
-        // 🆕 Call Pi Platform API to approve payment
-        const piApprovalResponse = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Key ${process.env.PI_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
-        })
-
-        if (!piApprovalResponse.ok) {
-            const error = await piApprovalResponse.text()
-            console.error('Pi payment approval failed:', error)
-            return NextResponse.json(
-                { error: 'Payment approval failed' },
-                { status: 400 }
-            )
-        }
-
         // Create pending settlement record
         const settlement = await prisma.settlement.create({
             data: {
@@ -51,7 +34,7 @@ export const POST = withAuth(async (req) => {
                 amount: parseFloat(amount),
                 status: 'pending',
                 piTransactionId: paymentId,
-                blockchainNetwork: 'mainnet',
+                blockchainNetwork: 'testnet',
                 metadata: {
                     currency,
                     category: category || null,
@@ -59,22 +42,6 @@ export const POST = withAuth(async (req) => {
                     paymentType,
                     receiverPublicKey,
                     approved: true
-                }
-            }
-        })
-
-        // Create activity log
-        await prisma.activity.create({
-            data: {
-                userId,
-                type: 'payment_approved',
-                description: `Payment approved: ${amount} ${currency}`,
-                metadata: {
-                    settlementId: settlement.id,
-                    paymentId,
-                    receiverPublicKey,
-                    amount,
-                    currency
                 }
             }
         })

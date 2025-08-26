@@ -38,9 +38,7 @@ export const PiAuth = () => {
         })
 
         if (response.ok) {
-          const userData = await response.json()
-          console.log("User created/retrieved:", userData)
-          
+          const userData = await response.json()          
           // 3. Store user data in auth store
           setUser({
             id: userData.user.id,
