@@ -39,7 +39,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-
   // Fetch dashboard data
   const fetchDashboardData = async () => {
     if (!isAuthenticated) return
@@ -50,10 +49,8 @@ export default function DashboardPage() {
       
       if (response.ok) {
         const result = await response.json()
-        console.log("this is the result with pi balence",result)
         setData(result.data)
         setLastRefresh(new Date())
-        console.log('Dashboard data loaded:', result.data)
       } else {
         throw new Error(`Failed to fetch dashboard data: ${response.status}`)
       }
@@ -208,7 +205,7 @@ export default function DashboardPage() {
         <OverviewCards 
           data={data?.financialSummary} 
           loading={loading}
-           piBalance={ data?.piBalance}
+          
         />
       </motion.div>
 

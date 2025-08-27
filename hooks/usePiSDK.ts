@@ -44,7 +44,6 @@ export const usePiSDK = () => {
         try {
             const scopes = ['username', 'payments']
             const authResult = await piSDK.authenticate(scopes, onIncompletePaymentFound)
-            console.log("this is the authresult", authResult)
             setUser(authResult.user)
             localStorage.setItem('pi_user', JSON.stringify(authResult.user))
             localStorage.setItem('pi_access_token', authResult.accessToken)

@@ -14,8 +14,8 @@ export const verifyPiAccessToken = async (accessToken: string) => {
             return {
                 isValid: true,
                 user: {
-                    uid: userData.uid,           // ✅ Verified Pi User ID
-                    username: userData.username  // Pi username (optional)
+                    uid: userData.uid,
+                    username: userData.username
                 }
             }
         } else {
