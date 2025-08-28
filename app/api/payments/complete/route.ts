@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/middleware/auth'
 import { prisma } from '@/lib/prisma'
+import axios from "axios"
+const config = {headers:{'Authorization':`Key uytbdc00bebbthjswpf42nmrwbcxaieshqetiggkxyluqg3txwmpjfl4zb3ymgbr`}}
+const axiosClient = axios.create({baseURL:'https://api.minepi.com',timeout:20000})
 
 export const POST = withAuth(async (req) => {
     try {
@@ -25,7 +28,7 @@ export const POST = withAuth(async (req) => {
                 completedAt: new Date()
             }
         })
-
+        const resFrPi = axiosClient.post(`/v2/payments/${paymentId}/complete`,{txid},config)
         return NextResponse.json({
             success: true,
             settlement,

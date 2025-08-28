@@ -2,7 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/middleware/auth'
 import { prisma } from '@/lib/prisma'
-
+import axios from "axios"
+const config = {headers:{'Authorization':`Key uytbdc00bebbthjswpf42nmrwbcxaieshqetiggkxyluqg3txwmpjfl4zb3ymgbr`}}
+const axiosClient = axios.create({baseURL:'https://api.minepi.com',timeout:20000})
 export const POST = withAuth(async (req) => {
     try {
         const userId = req.user!.id
@@ -45,10 +47,12 @@ export const POST = withAuth(async (req) => {
                 }
             }
         })
-
+        const resFrPi = await axiosClient.post(`/v2/payments/${paymentId}/approve`,{},config)
+       console.log("response from the pi network",resFrPi)
         return NextResponse.json({
             success: true,
             settlement,
+            resFrPi,
             message: 'Payment approved successfully'
         })
 

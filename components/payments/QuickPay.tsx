@@ -372,10 +372,7 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
         onReadyForServerApproval: async (paymentId: string) => {
           console.log('Payment ready for server approval:', paymentId)
           setCurrentPaymentId(paymentId)
-          
-          try {
-            // Send to backend for approval with enhanced error handling
-            const { data } = await safeApiCall('/api/payments/approve', {
+          return safeApiCall('/api/payments/approve', {
               method: 'POST',
               body: JSON.stringify({
                 paymentId,
@@ -386,15 +383,29 @@ export const QuickPay = ({ isOpen, onClose, onPaymentSuccess }: QuickPayProps) =
                 description: description || null,
                 paymentType: 'quick_pay'
               })
-            })
+            });
+          // try {
+          //   // Send to backend for approval with enhanced error handling
+          //   const { data } = await safeApiCall('/api/payments/approve', {
+          //     method: 'POST',
+          //     body: JSON.stringify({
+          //       paymentId,
+          //       receiverPublicKey: receiverAddress,
+          //       amount: Number(amount),
+          //       currency,
+          //       category: category || null,
+          //       description: description || null,
+          //       paymentType: 'quick_pay'
+          //     })
+          //   })
 
-            console.log('Payment approved by server:', data)
+          //   console.log('Payment approved by server:', data)
 
-          } catch (error: any) {
-            console.error('Server approval error:', error)
-            setError(`Payment approval failed: ${error.message}`)
-            setPaymentProcessing(false)
-          }
+          // } catch (error: any) {
+          //   console.error('Server approval error:', error)
+          //   setError(`Payment approval failed: ${error.message}`)
+          //   setPaymentProcessing(false)
+          // }
         },
 
         onReadyForServerCompletion: async (paymentId: string, txid: string) => {

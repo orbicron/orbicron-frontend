@@ -1,4 +1,3 @@
-// middleware/auth.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPiAccessToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'

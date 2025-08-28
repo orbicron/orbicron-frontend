@@ -1,4 +1,3 @@
-// lib/auth.ts
 export const verifyPiAccessToken = async (accessToken: string) => {
     try {
         const response = await fetch('https://api.minepi.com/v2/me', {
