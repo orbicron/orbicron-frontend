@@ -64,7 +64,7 @@ const mockHistory = [
 export const SettlementHistory = () => {
   const openPiBlockExplorer = (txHash: string) => {
     // Open Pi Network block explorer (when available)
-    window.open(`https://explorer.pi.network/tx/${txHash}`, '_blank')
+    window.open(`https://blockexplorer.minepi.com/tx/${txHash}`, '_blank')
   }
 
   const getStatusIcon = (status: string) => {
